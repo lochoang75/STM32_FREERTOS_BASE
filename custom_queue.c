@@ -1,5 +1,5 @@
-#include "FreeRTOS/Source/include/semphr.h"
-#include "FreeRTOS/Source/portable/RVDS/ARM_CM4F/portmacro.h"
+#include "semphr.h"
+#include "portmacro.h"
 
 #include "custom_queue.h"
 #define MAX_QUEUE_SIZE  20

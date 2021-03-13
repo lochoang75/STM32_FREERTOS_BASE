@@ -1,6 +1,6 @@
 #ifndef CUSTOM_QUEUE_H
 #define CUSTOM_QUEUE_H
-#include "FreeRTOS/Source/include/semphr.h"
+#include "semphr.h"
 
 #pragma pack(1)
 /*!
