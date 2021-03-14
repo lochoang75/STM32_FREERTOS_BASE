@@ -70,6 +70,10 @@ TaskHandle_t xButtonHandler = NULL;
 //added by DUY
 TaskHandle_t xButtonHandler_1 = NULL;
 
+// Queue handle 
+QueueHandle_t userInputEventQueue;
+QueueHandle_t playerEventQueue;
+
 /** ISR Function **/
 void EXTI0_IRQHandler(void) 
 {
@@ -164,6 +168,10 @@ int main( void )
 	InitButton();
 	printf("FreeRTOS running on STM32F407 Discovery Board\n");
 	counting500ms();//inititate the 500ms timer
+	// user input event queue
+	userInputEventQueue = xQueueCreate(2, sizeof(button_action_t));
+	playerEventQueue = xQueueCreate(2, sizeof(player_event_t));
+	
 
 	/* Create one of the two tasks. */
 	
@@ -285,6 +293,7 @@ void vDetectButtonType(void *pvParameters){
 											printf("single press is done,single press is done,single press is done,single press is done\n");
 											
 											//PUSH BUTTON ACTION TO QUEUE
+											xQueueSend(userInputEventQueue, &btn_action, portMAX_DELAY);
 											break;
 										}
                 } else {
@@ -301,6 +310,7 @@ void vDetectButtonType(void *pvParameters){
 										timeOut=false;
 										printf("double press is done,double press is done,double press is done\n");
 										//PUSH BUTTON ACTION TO QUEUE
+										xQueueSend(userInputEventQueue, &btn_action, portMAX_DELAY);
 
                     break;
                 }
@@ -340,6 +350,7 @@ void vTaskDetectUserState(void *pvParameters){
 	while(1){
 		
 		//pop event from message queue
+		xQueueReceive(userInputEventQueue, &button, portMAX_DELAY);
 		switch(userState){
 			case user_select_tone:
 				switch(button){

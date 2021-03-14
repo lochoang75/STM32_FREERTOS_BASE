@@ -25,6 +25,11 @@ typedef enum button_action {
     button_double_pressed
 } button_action_t;
 
+typedef enum player_event {
+	player_stop = 0,
+	player_start
+} player_event_t;
+
 //user state
 typedef enum{
 	user_select_tone = 0,
