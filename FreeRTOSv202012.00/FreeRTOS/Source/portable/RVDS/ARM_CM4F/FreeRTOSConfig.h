@@ -110,7 +110,7 @@ to exclude the API function. */
 #define INCLUDE_vTaskDelay				1
 #define INCLUDE_xResumeFromISR    1
 #define INCLUDE_xTaskResumeFromISR	1
-
+#define INCLUDE_xTaskGetSchedulerState 1
 /* FreeRTOS+CLI definitions. */
 
 /* Dimensions a buffer into which command outputs can be written.  The buffer
@@ -137,12 +137,12 @@ Check  https://www.freertos.org/a00110.html#kernel_priority
 
 /* The lowest interrupt priority that can be used in a call to a "set priority"
 function. */
-#define configLIBRARY_LOWEST_INTERRUPT_PRIORITY			0x0f
+#define configLIBRARY_LOWEST_INTERRUPT_PRIORITY			15//0x0f
 
 /* The highest interrupt priority that can be used by any interrupt service
 routine that makes calls to interrupt safe FreeRTOS API functions.  DO NOT CALL
 INTERRUPT SAFE FREERTOS API FUNCTIONS FROM ANY INTERRUPT THAT HAS A HIGHER
-PRIORITY THAN THIS! (higher priorities are lower numeric values. */
+PRIORITY THAN THIS! (higher priorities are lower numeric values in NVIC)*/
 #define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY	10
 
 /* Interrupt priorities used by the kernel port layer itself.  These are generic

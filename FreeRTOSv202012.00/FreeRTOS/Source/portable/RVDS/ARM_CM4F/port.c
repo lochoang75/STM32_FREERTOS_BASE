@@ -131,8 +131,9 @@ void vPortSVCHandler( void );
 /* Here the name of PendSV, SysTcik and SVC handler are not same as that defined in the start up code of STM32F407 board,
 so we need to make these file point to those functions in the start-up code, in start up code these are defined by names:
 PendSV_Handler,  SysTick_Handler and SVC_Handler */
+
 #define  xPortPendSVHandler      PendSV_Handler 
-#define  xPortSysTickHandler     SysTick_Handler
+//#define  xPortSysTickHandler     SysTick_Handler
 #define  vPortSVCHandler         SVC_Handler
 
 /*
@@ -538,7 +539,7 @@ void xPortSysTickHandler( void )
             portNVIC_INT_CTRL_REG = portNVIC_PENDSVSET_BIT;
         }
     }
-
+		
     vPortClearBASEPRIFromISR();
 }
 /*-----------------------------------------------------------*/

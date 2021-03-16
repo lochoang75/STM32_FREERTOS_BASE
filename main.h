@@ -37,4 +37,12 @@ typedef enum{
 	user_select_duration,
 	user_confirm_duration
 } user_action_t;
+
+typedef enum{
+	none,
+	orange,
+	red,
+	blue,
+	green
+}led;
 #endif
