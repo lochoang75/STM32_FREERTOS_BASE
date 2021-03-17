@@ -43,9 +43,15 @@ PendSV, SysTcik and SVC handlers "define" have been added to port.c
 #define G6				1568.0f 
 #define A6				1760.0f 
 
-#define DEFAULT_DURATION 200
+#define DEFAULT_DURATION 500
 
-const float toneArr[8] = {A5,B5,C6,D6,E6,F6,G6,A6};
+#define TONE_ARR_SIZE 8
+#define LENGTH_ARR_SIZE 4
+#define MAX_TONE_ID 2
+
+const float toneArr[TONE_ARR_SIZE] = {E6,F6,E6,F6,E6,F6,E6,F6};
+const int length[LENGTH_ARR_SIZE]={500,1000,1500,2000};
+
 /* The task functions prototype*/
 void vTaskBlueLED( void *pvParameters );
 void vTaskOrangeLED( void *pvParameters );
@@ -62,7 +68,7 @@ system_state_t system_state = sys_state_idle;
 static volatile bool button_trigger_flag = 0;
 button_action_t btn_action = button_no_action;
 volatile bool timeOut=false;
-select_tone_t toneList[2];
+select_tone_t toneList[MAX_TONE_ID];
 int toneId = 0;
 
 
@@ -151,6 +157,7 @@ void EXTI0_IRQHandler(void)
 	//BaseType_t xYieldRequiredCheck = xTaskResumeFromISR(xButtonHandler);
 	//portYIELD_FROM_ISR(xYieldRequiredCheck); // Yield to avoid delayed until the next time the scheduler
 	buttonIrqCallback();
+	
 	return;
 }
 
@@ -243,8 +250,8 @@ void InitButton(void)
     // Set GPIOA Pin Parameters, pin 0 for button
     GPIO_InitStruct.Pin     = GPIO_PIN_0;
 	  // Specifies the trigger signal active edge for the EXTI lines. (e.g. Rising = button is pressed)
-    GPIO_InitStruct.Mode    = GPIO_MODE_IT_RISING; //ori GPIO_MODE_IT_FALLING
-    GPIO_InitStruct.Pull    = GPIO_PULLDOWN; //ori GPIO_NOPULL
+    GPIO_InitStruct.Mode    = GPIO_MODE_IT_FALLING; //ori GPIO_MODE_IT_FALLING
+    GPIO_InitStruct.Pull    = GPIO_NOPULL; //ori GPIO_NOPULL
     GPIO_InitStruct.Speed   = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);  // Init GPIOA
 		HAL_NVIC_SetPriority(EXTI0_IRQn, 10, 0);
@@ -445,43 +452,23 @@ void vDetectButtonType(void *pvParameters){
 										//printf("double press is done,double press is done,double press is done\n");
 										//PUSH BUTTON ACTION TO QUEUE
 										xQueueSend(userInputEventQueue, &btn_action, portMAX_DELAY);
-
                     break;
                 }
                 break;
-						//ADDED ON 17/2/////////////////////////////////////////////////////		
-						/*case sys_state_wait_multiple_press:{
-							//HAL_Delay(10);
-							//for(;;){
-								//since there is a button press, we must initialize the timer 5s. Because maybe the user won't press anymore
-								if(button_trigger_flag==1){
-									if(initialTimer==false){
-										startTimer5s();
-										initialTimer=true;
-									}
-								}
-								if(timeOut==true){
-									stopTimer5s();
-									initialTimer=false;
-									timeOut=false;
-									btn_action = button_multiple_pressed;
-									system_state = sys_state_on_working;
-									break;
-								}
-								
-							//}
-						}*/
+					
 		}
 	}
 }
 //TASK 2, for detecting user state
-led curLedId = none;
-int tonePosition = 0;
+
 void vTaskDetectUserState(void *pvParameters){
 	button_action_t button = button_no_action;
 	user_action_t userState = user_select_tone;
 	select_tone_t tone = {.tone=0,.duration=0};
 	player_event_t player_event = player_stop;
+	int durationId = -1;
+	led curLedId = none;
+	int tonePosition = -1;
 	while(1){
 		//pop event from message queue
 		xQueueReceive(userInputEventQueue, &button, portMAX_DELAY);
@@ -490,6 +477,13 @@ void vTaskDetectUserState(void *pvParameters){
 				switch(button){
 					//single press for iterating tones
 					case button_single_pressed:
+						if(toneId==MAX_TONE_ID)
+							break;
+						tonePosition++;
+					
+						if(tonePosition==TONE_ARR_SIZE){
+							tonePosition=0;
+						}
 						//iterating tones, show led according to tones
 						curLedId++;
 						turnOnCurLEDS(curLedId);
@@ -497,20 +491,17 @@ void vTaskDetectUserState(void *pvParameters){
 						if(curLedId==green){
 							curLedId=none;
 						}
-						//REMEMBER TO RESET TONE POS WHEN IT IS = 8
-						tonePosition++;
-						if(tonePosition==8){
-							tonePosition=0;
-						}
+						
 						break;
 					case button_double_pressed:
 						
 						//only set tone ID, 
 						turnOffAllLEDS();
 						blinkLEDS(curLedId);
-						toneList[toneId].tone=curLedId;
+						toneList[toneId].tone=toneArr[tonePosition];
 						userState = user_select_duration;
 						curLedId=none;
+						tonePosition = -1;
 						break;
 					default:
 						break;
@@ -522,6 +513,9 @@ void vTaskDetectUserState(void *pvParameters){
 				switch(button){
 					//single press for iterating tones
 					case button_single_pressed:
+						durationId++;
+						if(durationId==LENGTH_ARR_SIZE)
+							durationId=0;
 						//iterating durations, show led according to tones
 						curLedId++;	
 						turnOnCurLEDS(curLedId);
@@ -535,16 +529,20 @@ void vTaskDetectUserState(void *pvParameters){
 						turnOffAllLEDS();					
 						blinkLEDS(curLedId);
 						//use list[i].duration
-						tone.duration=10;
+						toneList[toneId].duration=length[durationId];
 						userState = user_select_tone;
 						//PUSH TONE TO TONE QUEUE.
 						//toneList[toneId].tone=curLedId;
 						curLedId=none;
+						durationId = -1;
+					
 						toneId++;
-						if(toneId==2){
+						if(toneId==MAX_TONE_ID){
+							vTaskSuspend(xButtonHandler_1);
 							player_event = player_start;
 							xQueueSend(playerEventQueue, &player_event, portMAX_DELAY);
 						}
+					
 						break;
 					default:
 						break;
@@ -565,10 +563,12 @@ void vTaskPlaySong(void *pvParameters){
 	while(1){
 		xQueueReceive(playerEventQueue, &player_event,portMAX_DELAY);
 		if(player_event==player_start){
-			for(int i=0;i<toneId;i++){
+			for(int i=0;i<MAX_TONE_ID;i++){
 				blinkLEDS(toneList[i].tone);
-				//vTaskDelay(200);
+				playTone(toneList[i].tone,toneList[i].duration);
+				
 			}
+			vTaskResume(xButtonHandler_1);
 			toneId=0;
 		}
 	}
@@ -577,8 +577,7 @@ void vTaskPlaySong(void *pvParameters){
 void playTone(float tone, int time_ms){
 			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12,GPIO_PIN_SET);
 			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_SET);
-	
-			//printf("tone %d \n",tone);
+			printf("tone %d \n",(int)tone);
 			CS43_Init(hi2c1, MODE_I2S);
 			CS43_SetVolume(30); //0 - 100
 			CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
@@ -596,6 +595,7 @@ void playTone(float tone, int time_ms){
 			// Output the sample through I2S from DMA
 			HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)dataI2S, sample_N*2);
 			vTaskDelay(time_ms);
+			
 			// Reset the DAC output pin 
 			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4,GPIO_PIN_RESET);
 }
@@ -855,7 +855,7 @@ void vTaskConfirm(void){
 	}
 }
 
-toneLength length = HALF_SEC;
+/*toneLength length = HALF_SEC;
 void vTaskIterateLength(void){
 	for(;;){
 		vTaskSuspend(NULL); //waiting the button press to re-trigger the remaining code
@@ -880,5 +880,5 @@ void vTaskIterateLength(void){
 			}
 		}
 	}
-}
+}*/
 
