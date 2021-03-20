@@ -47,9 +47,13 @@ PendSV, SysTcik and SVC handlers "define" have been added to port.c
 
 #define TONE_ARR_SIZE 8
 #define LENGTH_ARR_SIZE 4
-#define MAX_TONE_ID 2
+#define MAX_TONE_ID 8
 
-const float toneArr[TONE_ARR_SIZE] = {E6,F6,E6,F6,E6,F6,E6,F6};
+//const float toneArr[TONE_ARR_SIZE] = {E6,F6,E6,F6,E6,F6,E6,F6};
+
+const float toneArr[TONE_ARR_SIZE] = {A5,B5,C6,D6,E6,F6,G6,A6};
+const int servoAngleIterateTone[TONE_ARR_SIZE]={400,600,800,1000,1200,1400,1600,1800};
+const int servoAngleIterateLength[LENGTH_ARR_SIZE]={400,800,1200,1600};
 const int length[LENGTH_ARR_SIZE]={500,1000,1500,2000};
 
 /* The task functions prototype*/
@@ -90,6 +94,11 @@ TaskHandle_t xButtonHandler_1 = NULL;
 TaskHandle_t xButtonHandler_2 = NULL;
 TaskHandle_t xButtonHandler_3 = NULL;
 
+TIM_HandleTypeDef TIM3_InitStruct;
+TIM_OC_InitTypeDef TIM3_OCInitStructure;
+
+
+
 float mySinVal;
 float sample_dt;
 uint16_t sample_N;
@@ -124,12 +133,21 @@ scheduler is started. SysTick_Handler (HAL_IncTick) is needed by
 HAL driver such as DAC that depends on system tick but it's "conflict" 
 with FreeRTOS xPortSysTickHandler because the SysTimer is used by FreeRTOS. 
 */
+void resetServoAngle(){
+	TIM3->CCR1 = 200;
+	vTaskDelay(100);
+}
+void setServoAngle(int pwmValue){
+	TIM3->CCR1 = pwmValue;
+	vTaskDelay(100);
+}
+
 void counting500ms(){
 		__HAL_RCC_TIM5_CLK_ENABLE(); // Enable clock to TIM2 from APB1 bus (42Mhz max)xPLL_P = 84MHz
 		TIM_InitStruct_2.Instance = TIM5;
     TIM_InitStruct_2.Init.Prescaler   = 1400-1;
 		TIM_InitStruct_2.Init.CounterMode = TIM_COUNTERMODE_UP;
-    TIM_InitStruct_2.Init.Period = 30000-1;		
+    TIM_InitStruct_2.Init.Period = 12000-1;		
 		TIM_InitStruct_2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 		TIM_InitStruct_2.Init.RepetitionCounter = 0;
 		HAL_TIM_Base_Init(&TIM_InitStruct_2); // Init TIM2 
@@ -244,6 +262,60 @@ void InitGPIO(void)
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 }
 
+void InitServo(void)
+{
+    __HAL_RCC_GPIOA_CLK_ENABLE();  // Enable clock to GPIO-B for PB6 and PB7
+    // Set GPIOB Pins Parameters, PB6 and PB7 
+		GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_7;  //PB6: TIM4_CH1 and PB7: TIM4_CH2
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP; //Alternate Function Push Pull Mode 
+    GPIO_InitStruct.Pull = GPIO_NOPULL; // No Pull-up or Pull-down activation
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF2_TIM3; // Assign those pins alternate function in TIM4 
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct); // Init GPIOB
+		
+}
+
+void InitTimer3(void)
+{
+		//__TIM1_CLK_ENABLE();
+		__HAL_RCC_TIM3_CLK_ENABLE(); // Enable clock to TIM3 from APB2 bus (48Mhz max)xPLL_P = 84MHz
+		 
+	// TIM4 is configure to 50hz: 50 times in 1s or 1000000us
+		//Tim_Tick_Freq = 1Mhz. Tim_Freq = 50Hz
+
+    TIM3_InitStruct.Instance = TIM3;
+		TIM3_InitStruct.Init.Period = 20000-1;
+    TIM3_InitStruct.Init.Prescaler   = 84-1;
+		TIM3_InitStruct.Init.CounterMode = TIM_COUNTERMODE_UP;
+		TIM3_InitStruct.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+		TIM3_InitStruct.Init.RepetitionCounter = 0;
+		HAL_TIM_Base_Init(&TIM3_InitStruct); // Init TIM3
+		
+		/*//if you would like to enable interrupt
+		//HAL_TIM_Base_Start_IT(&TIM3_InitStruct); // Enable timer-3 IRQ interrupt
+		//HAL_NVIC_SetPriority(TIM3_IRQn, 0, 0);
+		//HAL_NVIC_EnableIRQ(TIM3_IRQn); // Enable interrupt at IRQ-Level
+		*/
+    HAL_TIM_Base_Start(&TIM3_InitStruct); // Start TIM3
+}
+
+void SetupPWM_TIM3()
+{
+	HAL_TIM_PWM_Init(&TIM3_InitStruct);
+	
+	TIM3_OCInitStructure.OCMode = TIM_OCMODE_PWM1; //Set output capture as PWM mode
+  TIM3_OCInitStructure.Pulse = 0; // Initial duty cycle at 0%
+  TIM3_OCInitStructure.OCPolarity = TIM_OCPOLARITY_HIGH; // HIGH output compare active
+  TIM3_OCInitStructure.OCFastMode = TIM_OCFAST_DISABLE; // output compare disable
+	HAL_TIM_PWM_ConfigChannel(&TIM3_InitStruct, &TIM3_OCInitStructure, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&TIM3_InitStruct, TIM_CHANNEL_1); // Start PWM at channel 1
+	HAL_TIM_PWM_ConfigChannel(&TIM3_InitStruct, &TIM3_OCInitStructure, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&TIM3_InitStruct, TIM_CHANNEL_2); // Start PWM at channel 2
+}
+
+
+
+
 void InitButton(void)
 {
 	  __HAL_RCC_GPIOA_CLK_ENABLE();  // Enable clock to GPIO-A for button
@@ -319,6 +391,10 @@ int main( void )
 	InitDMA();
 	InitI2C1();
 	InitI2S3();
+	
+	InitServo();
+	InitTimer3();
+	SetupPWM_TIM3();
 	soundOn = true;
 
 	counting500ms();//inititate the 500ms timer
@@ -382,7 +458,7 @@ void stopTimer500ms(){
 	HAL_TIM_Base_Stop_IT(&TIM_InitStruct_2);
 	HAL_TIM_Base_Stop(&TIM_InitStruct_2);
 }
-
+//task 1
 void vDetectButtonType(void *pvParameters){
 	while(1){
 		vTaskDelay(10);
@@ -483,20 +559,30 @@ void vTaskDetectUserState(void *pvParameters){
 					
 						if(tonePosition==TONE_ARR_SIZE){
 							tonePosition=0;
+							//reset servo
+							resetServoAngle();
 						}
+						setServoAngle(servoAngleIterateTone[tonePosition]);
+
 						//iterating tones, show led according to tones
 						curLedId++;
+						if(curLedId==green+1){
+							curLedId=orange;
+						}
+						
 						turnOnCurLEDS(curLedId);
 						playTone(toneArr[tonePosition],DEFAULT_DURATION);
-						if(curLedId==green){
+						/*if(curLedId==green){
 							curLedId=none;
-						}
+						}*/
 						
 						break;
 					case button_double_pressed:
-						
+						//reset when user confirm 
+						resetServoAngle();
 						//only set tone ID, 
 						turnOffAllLEDS();
+						
 						blinkLEDS(curLedId);
 						toneList[toneId].tone=toneArr[tonePosition];
 						userState = user_select_duration;
@@ -513,18 +599,25 @@ void vTaskDetectUserState(void *pvParameters){
 				switch(button){
 					//single press for iterating tones
 					case button_single_pressed:
+						
 						durationId++;
-						if(durationId==LENGTH_ARR_SIZE)
+						if(durationId==LENGTH_ARR_SIZE){
 							durationId=0;
+							//resetServoAngle();
+						}
+						//setServoAngle(servoAngleIterateLength[durationId]);
+	
 						//iterating durations, show led according to tones
 						curLedId++;	
+						if(curLedId==green+1){
+							curLedId=orange;
+						}
 						turnOnCurLEDS(curLedId);
 						
-						if(curLedId==green){
-							curLedId=none;
-						}
+						
 						break;
 					case button_double_pressed:
+						//resetServoAngle();
 						//only set tone duration,
 						turnOffAllLEDS();					
 						blinkLEDS(curLedId);
@@ -564,9 +657,8 @@ void vTaskPlaySong(void *pvParameters){
 		xQueueReceive(playerEventQueue, &player_event,portMAX_DELAY);
 		if(player_event==player_start){
 			for(int i=0;i<MAX_TONE_ID;i++){
-				blinkLEDS(toneList[i].tone);
+				//blinkLEDS(toneList[i].tone);
 				playTone(toneList[i].tone,toneList[i].duration);
-				
 			}
 			vTaskResume(xButtonHandler_1);
 			toneId=0;
@@ -595,7 +687,8 @@ void playTone(float tone, int time_ms){
 			// Output the sample through I2S from DMA
 			HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)dataI2S, sample_N*2);
 			vTaskDelay(time_ms);
-			
+			//ADDED ON 20/3/2021
+			HAL_I2S_DMAStop(&hi2s3);
 			// Reset the DAC output pin 
 			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4,GPIO_PIN_RESET);
 }
@@ -812,6 +905,7 @@ void turnOnCurLEDS(led curLed){
 			break;
 	}
 }
+
 
 void blinkLEDS(led curLed){
 	for(int i=0;i<2;i++){
