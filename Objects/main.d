@@ -52,3 +52,7 @@
 .\objects\main.o: .\FreeRTOSv202012.00\FreeRTOS\Source\include\semphr.h
 .\objects\main.o: .\FreeRTOSv202012.00\FreeRTOS\Source\include\queue.h
 .\objects\main.o: main.h
+.\objects\main.o: coffee_task.h
+.\objects\main.o: task_queue.h
+.\objects\main.o: coffee_task.h
+.\objects\main.o: task_schedule.h

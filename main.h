@@ -30,19 +30,15 @@ typedef enum player_event {
 	player_start
 } player_event_t;
 
-//user state
 typedef enum{
-	user_select_tone = 0,
-	user_confirm_tone,
-	user_select_duration,
-	user_confirm_duration
-} user_action_t;
+	reset,
+	on,
+	off
+}schedule_flag_t;
 
 typedef enum{
 	none,
 	orange,
-	red,
-	blue,
 	green
 }led;
 #endif

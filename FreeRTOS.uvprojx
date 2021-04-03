@@ -398,6 +398,21 @@
               <FileType>1</FileType>
               <FilePath>.\stm32f4xx_hal_msp.c</FilePath>
             </File>
+            <File>
+              <FileName>coffee_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\coffee_task.c</FilePath>
+            </File>
+            <File>
+              <FileName>task_queue.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\task_queue.c</FilePath>
+            </File>
+            <File>
+              <FileName>task_schedule.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\task_schedule.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

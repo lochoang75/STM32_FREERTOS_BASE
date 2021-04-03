@@ -26,40 +26,25 @@ PendSV, SysTcik and SVC handlers "define" have been added to port.c
 #include "MY_CS43L22.h"
 #include "custom_queue.h"
 #include "main.h"
+#include "coffee_task.h"
+#include "task_queue.h"
+#include "task_schedule.h"
 
 #define STACK_SIZE_MIN	128	/* usStackDepth	- the stack size DEFINED IN WORDS.*/
-#define PI 3.14159f
-//Sample rate and Output freq
-#define F_SAMPLE		48000.0f // Sample freq
-#define F_OUT				880.0f  // Output freq 
-#define AMP				1000  // Output amplitute 
-  
-#define A5				880.0f  
-#define B5				988.0f
-#define C6				1047.0f
-#define D6				1175.0f  
-#define E6				1319.0f   
-#define F6				1397.0f   
-#define G6				1568.0f 
-#define A6				1760.0f 
 
 #define DEFAULT_DURATION 500
 
-#define TONE_ARR_SIZE 8
-#define LENGTH_ARR_SIZE 4
-#define MAX_TONE_ID 8
+
 
 //const float toneArr[TONE_ARR_SIZE] = {E6,F6,E6,F6,E6,F6,E6,F6};
 
-const float toneArr[TONE_ARR_SIZE] = {A5,B5,C6,D6,E6,F6,G6,A6};
-const int servoAngleIterateTone[TONE_ARR_SIZE]={400,600,800,1000,1200,1400,1600,1800};
-const int servoAngleIterateLength[LENGTH_ARR_SIZE]={400,800,1200,1600};
-const int length[LENGTH_ARR_SIZE]={500,1000,1500,2000};
+//const int servoAngleIterateTone[TONE_ARR_SIZE]={400,600,800,1000,1200,1400,1600,1800};
+//const int servoAngleIterateLength[LENGTH_ARR_SIZE]={400,800,1200,1600};
+//const int length[LENGTH_ARR_SIZE]={500,1000,1500,2000};
 
 /* The task functions prototype*/
 void vTaskBlueLED( void *pvParameters );
 void vTaskOrangeLED( void *pvParameters );
-void vTaskButton( void *pvParameters );
 void vTaskBeep( void *pvParameters ) ;
 
 /* Global Variables */
@@ -72,8 +57,8 @@ system_state_t system_state = sys_state_idle;
 static volatile bool button_trigger_flag = 0;
 button_action_t btn_action = button_no_action;
 volatile bool timeOut=false;
-select_tone_t toneList[MAX_TONE_ID];
-int toneId = 0;
+//select_tone_t toneList[MAX_TONE_ID];
+//int toneId = 0;
 
 
 bool initialTimer=false;
@@ -86,7 +71,7 @@ DMA_HandleTypeDef hdma_spi3_tx;
 
 TaskHandle_t xBlueLEDHandler = NULL;
 TaskHandle_t xButtonHandler = NULL;
-TaskHandle_t xSoundHandler = NULL;
+TaskHandle_t xScheduleHandler = NULL;
 QueueHandle_t userInputEventQueue;
 QueueHandle_t playerEventQueue;
 //added by DUY
@@ -112,7 +97,6 @@ bool soundOn;
 
 void vTaskBlueLED( void *pvParameters );
 void vTaskOrangeLED( void *pvParameters );
-void vTaskButton( void *pvParameters );
 ///////////////////PREDEFINED FUNCTION////////////////////////
 void turnOnRedLED(void);
 void turnOnBlueLED(void);
@@ -127,6 +111,8 @@ void blinkLEDS(led);
 void vTaskDetectUserState(void *pvParameters);
 void vTaskPlaySong(void *pvParameters);
 void playTone(float tone, int time_ms);
+void vTaskRunSchedule(void *pvParameters);
+
 /*
 Use SysTick_Handler to wake xPortSysTickHandler when the FreeRTOS's 
 scheduler is started. SysTick_Handler (HAL_IncTick) is needed by 
@@ -175,15 +161,9 @@ void EXTI0_IRQHandler(void)
 	//BaseType_t xYieldRequiredCheck = xTaskResumeFromISR(xButtonHandler);
 	//portYIELD_FROM_ISR(xYieldRequiredCheck); // Yield to avoid delayed until the next time the scheduler
 	buttonIrqCallback();
-	
 	return;
 }
 
-/** This function handles DMA1 stream5 global interrupt. **/
-void DMA1_Stream5_IRQHandler(void)
-{
-  HAL_DMA_IRQHandler(&hdma_spi3_tx);
-}
 
 void SystemClock_Config(void)
 {
@@ -313,9 +293,6 @@ void SetupPWM_TIM3()
 	HAL_TIM_PWM_Start(&TIM3_InitStruct, TIM_CHANNEL_2); // Start PWM at channel 2
 }
 
-
-
-
 void InitButton(void)
 {
 	  __HAL_RCC_GPIOA_CLK_ENABLE();  // Enable clock to GPIO-A for button
@@ -330,49 +307,7 @@ void InitButton(void)
 		HAL_NVIC_EnableIRQ(EXTI0_IRQn); // Enable GPIO_PIN_0 interrupt at IRQ-Level
 }	
 
-/* I2C1 init function */
-void InitI2C1(void)
-{
-		hi2c1.Instance = I2C1;
-		hi2c1.Init.ClockSpeed = 100000; // clock frequency <= 400kHz
-		hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2; //fast mode Tlow/Thigh = 2
-		hi2c1.Init.OwnAddress1 = 0; 
-		hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-		hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-		hi2c1.Init.OwnAddress2 = 0; 
-		hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-		hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-		HAL_I2C_Init(&hi2c1); //initialize the I2C peripheral 
-}
 
-/* I2S3 init function */
-void InitI2S3(void)
-{
-		hi2s3.Instance = SPI3;
-		hi2s3.Init.Mode = I2S_MODE_MASTER_TX; //transmit in master mode
-		hi2s3.Init.Standard = I2S_STANDARD_PHILIPS; //data protocol
-		hi2s3.Init.DataFormat = I2S_DATAFORMAT_16B; //bits per sample
-		hi2s3.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE; //master clock signal
-		hi2s3.Init.AudioFreq = I2S_AUDIOFREQ_48K; //audio frequency
-		hi2s3.Init.CPOL = I2S_CPOL_LOW; //clock polarity
-		hi2s3.Init.ClockSource = I2S_CLOCK_PLL;
-		hi2s3.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_DISABLE;
-		HAL_I2S_Init(&hi2s3); //set the setting 
-}
-
-/** 
-  * Enable DMA controller clock
-  */
-void InitDMA(void) 
-{
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Stream5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
-}
 /*-----------------------------------------------------------*/
 
 int main( void )
@@ -388,10 +323,6 @@ int main( void )
 	InitGPIO();
 	//InitLED();
 	InitButton();
-	InitDMA();
-	InitI2C1();
-	InitI2S3();
-	
 	InitServo();
 	InitTimer3();
 	SetupPWM_TIM3();
@@ -417,7 +348,7 @@ int main( void )
 	//xTaskCreate( vTaskButton, "vTaskButton", STACK_SIZE_MIN*2, NULL, tskIDLE_PRIORITY, &xButtonHandler );
 	xTaskCreate(vDetectButtonType, "vDetectButtonType",STACK_SIZE_MIN,NULL,3,&xButtonHandler_1);
 	xTaskCreate(vTaskDetectUserState, "vDetectUserState",STACK_SIZE_MIN,NULL,3,&xButtonHandler_2);
-	xTaskCreate(vTaskPlaySong, "vTaskPlaySong",STACK_SIZE_MIN,NULL,3,&xButtonHandler_3);
+	xTaskCreate(vTaskRunSchedule, "vTaskPlaySong",STACK_SIZE_MIN,NULL,3,&xButtonHandler_3);
 	/* Start the scheduler so our tasks start executing. */
 	vTaskStartScheduler();
 
@@ -535,163 +466,83 @@ void vDetectButtonType(void *pvParameters){
 		}
 	}
 }
-//TASK 2, for detecting user state
 
+schedule_type_t schedule = task_schedule_unknow;
+volatile schedule_flag_t schedule_flag = reset;
+//TASK 2, for detecting user state
 void vTaskDetectUserState(void *pvParameters){
 	button_action_t button = button_no_action;
-	user_action_t userState = user_select_tone;
-	select_tone_t tone = {.tone=0,.duration=0};
-	player_event_t player_event = player_stop;
+	//user_action_t userState = user_select_schedule;
+	//select_tone_t tone = {.tone=0,.duration=0};
+	//player_event_t player_event = player_stop;
 	int durationId = -1;
 	led curLedId = none;
 	int tonePosition = -1;
 	while(1){
 		//pop event from message queue
 		xQueueReceive(userInputEventQueue, &button, portMAX_DELAY);
-		switch(userState){
-			case user_select_tone:
+		
 				switch(button){
 					//single press for iterating tones
 					case button_single_pressed:
-						if(toneId==MAX_TONE_ID)
-							break;
-						tonePosition++;
-					
-						if(tonePosition==TONE_ARR_SIZE){
-							tonePosition=0;
-							//reset servo
-							resetServoAngle();
+						if(curLedId==green){
+							curLedId = orange;
 						}
-						setServoAngle(servoAngleIterateTone[tonePosition]);
-
-						//iterating tones, show led according to tones
+						if(schedule==task_schedule_unknow){
+							schedule = task_schedule_priority;
+						}
+						else if(schedule==task_schedule_priority){
+							schedule = task_schedule_custom;	
+						}
+						else{
+							schedule = task_schedule_priority;
+						}				
 						curLedId++;
-						if(curLedId==green+1){
-							curLedId=orange;
-						}
-						
-						turnOnCurLEDS(curLedId);
-						playTone(toneArr[tonePosition],DEFAULT_DURATION);
-						/*if(curLedId==green){
-							curLedId=none;
-						}*/
-						
-						break;
-					case button_double_pressed:
-						//reset when user confirm 
-						resetServoAngle();
-						//only set tone ID, 
+						//TODO : SET LED ACCORDING TO SCHEDULE TYPE . DONEE
 						turnOffAllLEDS();
-						
-						blinkLEDS(curLedId);
-						toneList[toneId].tone=toneArr[tonePosition];
-						userState = user_select_duration;
-						curLedId=none;
-						tonePosition = -1;
-						break;
-					default:
-						break;
-				}
-				break;
-			//case user_confirm_tone:
-			//	break;
-			case user_select_duration:
-				switch(button){
-					//single press for iterating tones
-					case button_single_pressed:
-						
-						durationId++;
-						if(durationId==LENGTH_ARR_SIZE){
-							durationId=0;
-							//resetServoAngle();
-						}
-						//setServoAngle(servoAngleIterateLength[durationId]);
-	
-						//iterating durations, show led according to tones
-						curLedId++;	
-						if(curLedId==green+1){
-							curLedId=orange;
-						}
 						turnOnCurLEDS(curLedId);
-						
-						
 						break;
-					case button_double_pressed:
-						//resetServoAngle();
-						//only set tone duration,
-						turnOffAllLEDS();					
+					case button_double_pressed: 
+						turnOffAllLEDS();
 						blinkLEDS(curLedId);
-						//use list[i].duration
-						toneList[toneId].duration=length[durationId];
-						userState = user_select_tone;
-						//PUSH TONE TO TONE QUEUE.
-						//toneList[toneId].tone=curLedId;
-						curLedId=none;
-						durationId = -1;
-					
-						toneId++;
-						if(toneId==MAX_TONE_ID){
-							vTaskSuspend(xButtonHandler_1);
-							player_event = player_start;
-							xQueueSend(playerEventQueue, &player_event, portMAX_DELAY);
-						}
-					
+						//setSchedulerType(schedule);
+						schedule_flag = reset;
+						curLedId=orange;
 						break;
 					default:
 						break;
-				}
-				break;
-			//case user_confirm_duration:
-			//	break;
-			default:
-				break;
+				}						
 		}
 		//check if the queue size = 8. If so, start the task 3 (Playing music)	
 		//PUSH EVENT PLAYING MUSIC TO QUEUE
 	}
-}
 //TASK 3, playing song
-void vTaskPlaySong(void *pvParameters){
-	player_event_t player_event = player_stop;
+void vTaskRunSchedule(void *pvParameters){
+	bool finished= false;
 	while(1){
-		xQueueReceive(playerEventQueue, &player_event,portMAX_DELAY);
-		if(player_event==player_start){
-			for(int i=0;i<MAX_TONE_ID;i++){
-				//blinkLEDS(toneList[i].tone);
-				playTone(toneList[i].tone,toneList[i].duration);
-			}
-			vTaskResume(xButtonHandler_1);
-			toneId=0;
+		switch(schedule_flag){
+			case on:
+				finished = startSchedule();
+				if( finished&& (schedule_flag==on)){
+					schedule_flag=off;
+				}
+				break;
+			case off:
+				//idle tasks
+				printf("idle task\n");
+				vTaskDelay(1500);
+				break;
+			case reset:
+				if(schedule!=task_schedule_unknow){
+					resetTaskQueue();
+					setSchedulerType(schedule);
+					schedule_flag=on;
+				}			
+				break;
 		}
 	}
 }
 
-void playTone(float tone, int time_ms){
-			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12,GPIO_PIN_SET);
-			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_SET);
-			printf("tone %d \n",(int)tone);
-			CS43_Init(hi2c1, MODE_I2S);
-			CS43_SetVolume(30); //0 - 100
-			CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
-			CS43_Start();
-			//Create Sine wave
-			sample_dt = tone/F_SAMPLE;
-			sample_N =  F_SAMPLE/tone;
-			for(uint16_t i=0; i<sample_N; i++)
-			{
-				mySinVal = AMP*sinf(i*2*PI*sample_dt); 
-				dataI2S[i*2] = mySinVal;    //Right data (even: 0,2,4,6...)
-				dataI2S[i*2 + 1] = mySinVal; //Left data  (odd: 1,3,5,7...)
-			}
-		
-			// Output the sample through I2S from DMA
-			HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)dataI2S, sample_N*2);
-			vTaskDelay(time_ms);
-			//ADDED ON 20/3/2021
-			HAL_I2S_DMAStop(&hi2s3);
-			// Reset the DAC output pin 
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4,GPIO_PIN_RESET);
-}
 
 
 
@@ -724,84 +575,6 @@ void vTaskOrangeLED( void *pvParameters ) // Orange LED
 		printf("%s\n",pcTaskName);
 		HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
 		vTaskDelay(1000);
-	}
-}
-
-void vTaskButton( void *pvParameters ) // Button Task (interrupt)
-{
-	const char *pcTaskName = "vTaskButton is running\n";
-	
-	for(;;)
-	{
-		vTaskSuspend(NULL); //Suspend itself until resume from ISR
-		/* Print out the name of this task in debug */
-		printf("%s\n",pcTaskName);
-		vTaskResume(xSoundHandler);
-		vTaskDelay(200); //Debounce using FreeRTOS software timer
-	}
-}
-
-void vTaskBeep( void *pvParameters ) 
-{
-	const char *pcTaskName = "vTaskBeep is running\n";
-
-	for(;;)
-	{
-		//vTaskSuspend(NULL); //Suspend itself until resume 
-		printf("%s\n",pcTaskName);
-		if (soundOn){	
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12,GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_SET);
-
-			CS43_Init(hi2c1, MODE_I2S);
-			CS43_SetVolume(30); //0 - 100
-			CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
-			CS43_Start();
-			//Create Sine wave
-			sample_dt = A5/F_SAMPLE;
-			sample_N =  F_SAMPLE/A5;
-			for(uint16_t i=0; i<sample_N; i++)
-			{
-				mySinVal = AMP*sinf(i*2*PI*sample_dt); 
-				dataI2S[i*2] = mySinVal;    //Right data (even: 0,2,4,6...)
-				dataI2S[i*2 + 1] = mySinVal; //Left data  (odd: 1,3,5,7...)
-			}
-		
-			// Output the sample through I2S from DMA
-			HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)dataI2S, sample_N*2);
-			vTaskDelay(500);
-			// Reset the DAC output pin 
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4,GPIO_PIN_RESET);
-			//CS43_Stop();
-			soundOn = false;
-		}
-		else{
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12,GPIO_PIN_SET);
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_RESET);
-			
-			CS43_Init(hi2c1, MODE_I2S);
-			CS43_SetVolume(1); //0 - 100
-			CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
-			CS43_Start();
-			//Create Sine wave
-			sample_dt = A6/F_SAMPLE;
-			sample_N =  F_SAMPLE/A6;
-			for(uint16_t i=0; i<sample_N; i++)
-			{
-				mySinVal = AMP*sinf(i*2*PI*sample_dt); 
-				dataI2S[i*2] = mySinVal;    //Right data (even: 0,2,4,6...)
-				dataI2S[i*2 + 1] = mySinVal; //Left data  (odd: 1,3,5,7...)
-			}
-		
-			// Output the sample through I2S from DMA
-			HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)dataI2S, sample_N*2);
-			vTaskDelay(500);
-			// Reset the DAC output pin 
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4,GPIO_PIN_RESET);
-			
-			soundOn = true;
-		}
-		vTaskSuspend(NULL); 
 	}
 }
 /*-----------------------------------------------------------*/
@@ -892,12 +665,6 @@ void turnOnCurLEDS(led curLed){
 		case orange:
 			turnOnOrangeLED();
 			break;
-		case red:
-			turnOnRedLED();
-			break;
-		case blue:
-			turnOnBlueLED();
-			break;
 		case green:
 			turnOnGreenLED();
 			break;
@@ -910,14 +677,8 @@ void turnOnCurLEDS(led curLed){
 void blinkLEDS(led curLed){
 	for(int i=0;i<2;i++){
 		switch(curLed){
-			case red:
-				turnOnRedLED();
-				break;
 			case green:
 				turnOnGreenLED();
-				break;
-			case blue:
-				turnOnBlueLED();
 				break;
 			case orange:
 				turnOnOrangeLED();
@@ -949,30 +710,4 @@ void vTaskConfirm(void){
 	}
 }
 
-/*toneLength length = HALF_SEC;
-void vTaskIterateLength(void){
-	for(;;){
-		vTaskSuspend(NULL); //waiting the button press to re-trigger the remaining code
-		//confirm when SINGLE
-		if(button == SINGLE_PRESS){
-			//4 types of length in total. 0.5s, 1.0s, 1.5s, 2.0s
-			turnOffAllLEDS();
-			switch(length){
-				case HALF_SEC:
-					//play tone in a predefined length, missing this fucntion
-					turnOnOrangeLED();
-					break;
-				case ONE_SEC:
-					turnOnRedLED();
-					break;
-				case ONE_HALF_SEC:
-					turnOnBlueLED();
-					break;
-				case TWO_SEC:
-					turnOnGreenLED();
-					break;
-			}
-		}
-	}
-}*/
 
