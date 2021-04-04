@@ -14,3 +14,4 @@
 .\objects\task_schedule.o: .\FreeRTOSv202012.00\FreeRTOS\Source\include\deprecated_definitions.h
 .\objects\task_schedule.o: .\FreeRTOSv202012.00\FreeRTOS\Source\portable\RVDS\ARM_CM4F\portmacro.h
 .\objects\task_schedule.o: .\FreeRTOSv202012.00\FreeRTOS\Source\include\mpu_wrappers.h
+.\objects\task_schedule.o: servo.h

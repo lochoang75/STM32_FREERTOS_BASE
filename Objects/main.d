@@ -56,3 +56,4 @@
 .\objects\main.o: task_queue.h
 .\objects\main.o: coffee_task.h
 .\objects\main.o: task_schedule.h
+.\objects\main.o: servo.h

@@ -2,22 +2,27 @@
 
 #include "task_queue.h"
 #include "coffee_task.h"
+#include "servo.h"
 
 task_t gTaskQueue[MAX_TASK_NUMBER] = {0}; /*!< global task queue */
 static void task1_action(void* param) {
     printf("Task 1 is running \r\n");
+		setServoAngle(2500);
 }
 
 static void task2_action(void* param) {
     printf("Task 2 is running \r\n");
+		setServoAngle(2000);
 }
 
 static void task3_action(void* param) {
     printf("Task 3 is running \r\n");
+		setServoAngle(1500);
 }
 
 static void task4_action(void* param) {
     printf("Task 4 is running \r\n");
+		setServoAngle(1000);
 }
 
 static const task_infomation_t taskList[MAX_TASK_NUMBER] = 

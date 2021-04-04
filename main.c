@@ -29,11 +29,13 @@ PendSV, SysTcik and SVC handlers "define" have been added to port.c
 #include "coffee_task.h"
 #include "task_queue.h"
 #include "task_schedule.h"
+#include "servo.h"
 
 #define STACK_SIZE_MIN	128	/* usStackDepth	- the stack size DEFINED IN WORDS.*/
 
 #define DEFAULT_DURATION 500
 
+//const int servoAngleIterateTask[TASK_SIZE]={400,600,800,1000,1200,1400,1600,1800};
 
 
 //const float toneArr[TONE_ARR_SIZE] = {E6,F6,E6,F6,E6,F6,E6,F6};
@@ -119,14 +121,6 @@ scheduler is started. SysTick_Handler (HAL_IncTick) is needed by
 HAL driver such as DAC that depends on system tick but it's "conflict" 
 with FreeRTOS xPortSysTickHandler because the SysTimer is used by FreeRTOS. 
 */
-void resetServoAngle(){
-	TIM3->CCR1 = 200;
-	vTaskDelay(100);
-}
-void setServoAngle(int pwmValue){
-	TIM3->CCR1 = pwmValue;
-	vTaskDelay(100);
-}
 
 void counting500ms(){
 		__HAL_RCC_TIM5_CLK_ENABLE(); // Enable clock to TIM2 from APB1 bus (42Mhz max)xPLL_P = 84MHz
@@ -141,6 +135,7 @@ void counting500ms(){
 		HAL_NVIC_EnableIRQ(TIM5_IRQn); // Enable interrupt at IRQ-Level
     //HAL_TIM_Base_Start(&TIM_InitStruct); // Start TIM2
 }
+
 
 void SysTick_Handler(void)
 {
@@ -242,18 +237,7 @@ void InitGPIO(void)
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 }
 
-void InitServo(void)
-{
-    __HAL_RCC_GPIOA_CLK_ENABLE();  // Enable clock to GPIO-B for PB6 and PB7
-    // Set GPIOB Pins Parameters, PB6 and PB7 
-		GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_7;  //PB6: TIM4_CH1 and PB7: TIM4_CH2
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP; //Alternate Function Push Pull Mode 
-    GPIO_InitStruct.Pull = GPIO_NOPULL; // No Pull-up or Pull-down activation
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = GPIO_AF2_TIM3; // Assign those pins alternate function in TIM4 
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct); // Init GPIOB
-		
-}
+
 
 void InitTimer3(void)
 {
@@ -278,7 +262,6 @@ void InitTimer3(void)
 		*/
     HAL_TIM_Base_Start(&TIM3_InitStruct); // Start TIM3
 }
-
 void SetupPWM_TIM3()
 {
 	HAL_TIM_PWM_Init(&TIM3_InitStruct);
@@ -437,10 +420,8 @@ void vDetectButtonType(void *pvParameters){
 											btn_action = button_single_pressed;
                       system_state = sys_state_idle;
 											//printf("single press is done,single press is done,single press is done,single press is done\n");
-											
-											
-											
 											//PUSH BUTTON ACTION TO QUEUE
+											printf("pushed single to queue\n");
 											xQueueSend(userInputEventQueue, &btn_action, portMAX_DELAY);
 											break;
 										}
@@ -458,7 +439,10 @@ void vDetectButtonType(void *pvParameters){
 										timeOut=false;
 										//printf("double press is done,double press is done,double press is done\n");
 										//PUSH BUTTON ACTION TO QUEUE
+										printf("pushed double to queue\n");
 										xQueueSend(userInputEventQueue, &btn_action, portMAX_DELAY);
+										//disableInteruptBtn();
+										buttonFlagReset();
                     break;
                 }
                 break;
@@ -472,6 +456,7 @@ volatile schedule_flag_t schedule_flag = reset;
 //TASK 2, for detecting user state
 void vTaskDetectUserState(void *pvParameters){
 	button_action_t button = button_no_action;
+	schedule_type_t tempSchedule = task_schedule_unknow;
 	//user_action_t userState = user_select_schedule;
 	//select_tone_t tone = {.tone=0,.duration=0};
 	//player_event_t player_event = player_stop;
@@ -485,29 +470,34 @@ void vTaskDetectUserState(void *pvParameters){
 				switch(button){
 					//single press for iterating tones
 					case button_single_pressed:
-						if(curLedId==green){
-							curLedId = orange;
+						printf("Single pressed\n");
+						if(tempSchedule==task_schedule_unknow){
+							tempSchedule = task_schedule_priority;
 						}
-						if(schedule==task_schedule_unknow){
-							schedule = task_schedule_priority;
-						}
-						else if(schedule==task_schedule_priority){
-							schedule = task_schedule_custom;	
+						else if(tempSchedule==task_schedule_priority){
+							tempSchedule = task_schedule_custom;	
 						}
 						else{
-							schedule = task_schedule_priority;
+							tempSchedule = task_schedule_priority;
 						}				
 						curLedId++;
+						if(curLedId==green+1){
+							curLedId = orange;
+						}
 						//TODO : SET LED ACCORDING TO SCHEDULE TYPE . DONEE
 						turnOffAllLEDS();
 						turnOnCurLEDS(curLedId);
 						break;
 					case button_double_pressed: 
+						printf("double pressed\n");
 						turnOffAllLEDS();
 						blinkLEDS(curLedId);
 						//setSchedulerType(schedule);
+						turnOffAllLEDS();
+						turnOnCurLEDS(curLedId);
 						schedule_flag = reset;
-						curLedId=orange;
+						//curLedId=orange;
+						schedule = tempSchedule;
 						break;
 					default:
 						break;
@@ -530,6 +520,7 @@ void vTaskRunSchedule(void *pvParameters){
 			case off:
 				//idle tasks
 				printf("idle task\n");
+				resetServoAngle();
 				vTaskDelay(1500);
 				break;
 			case reset:

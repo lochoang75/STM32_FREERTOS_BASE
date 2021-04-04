@@ -4,16 +4,18 @@
 #include "task_schedule.h"
 #include "task_queue.h"
 #include "FreeRTOS.h"
+#include "servo.h"
 
 
 #ifndef TASK_SCHELDULE_H
 #define TASK_SCHEDULE_H
 
-static void idleTaskPrint(void) {
+static void idleTaskPrint(void* param) {
     printf("Idle task run \r\n");
+		resetServoAngle();
 }
 
-static task_infomation_t idle_task_info = {1, MAX_TASK_NUMBER + 1, 1, 0, 0, idleTaskPrint};
+static task_infomation_t idle_task_info = {1, 0, 1, 0, 0, &idleTaskPrint};
 static task_t idle_task = {&idle_task_info, 0, 0, 0, task_ready};
 
 static inline task_t* getTask() {
@@ -99,7 +101,7 @@ bool startSchedule() {
     //while (true) {
         selectedTask = getTask();
         selectedTask->taskStatus = task_running;
-        if(selectedTask->cycleNum>=1){
+        if(selectedTask->cycleNum>=30){
             selectedTask = &idle_task;
             return 1;
         }
