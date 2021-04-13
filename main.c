@@ -35,45 +35,23 @@ PendSV, SysTcik and SVC handlers "define" have been added to port.c
 
 #define DEFAULT_DURATION 500
 
-//const int servoAngleIterateTask[TASK_SIZE]={400,600,800,1000,1200,1400,1600,1800};
-
-
-//const float toneArr[TONE_ARR_SIZE] = {E6,F6,E6,F6,E6,F6,E6,F6};
-
-//const int servoAngleIterateTone[TONE_ARR_SIZE]={400,600,800,1000,1200,1400,1600,1800};
-//const int servoAngleIterateLength[LENGTH_ARR_SIZE]={400,800,1200,1600};
-//const int length[LENGTH_ARR_SIZE]={500,1000,1500,2000};
-
-/* The task functions prototype*/
-void vTaskBlueLED( void *pvParameters );
-void vTaskOrangeLED( void *pvParameters );
-void vTaskBeep( void *pvParameters ) ;
 
 /* Global Variables */
 GPIO_InitTypeDef GPIO_InitStruct; // Initiate the structure that contains the configuration information for the specified GPIO peripheral.
-TIM_HandleTypeDef TIM_InitStruct;  // Initiate the structure that contains the configuration information for the timers
 TIM_HandleTypeDef TIM_InitStruct_2;
 
-/////////
 system_state_t system_state = sys_state_idle;
 static volatile bool button_trigger_flag = 0;
 button_action_t btn_action = button_no_action;
 volatile bool timeOut=false;
-//select_tone_t toneList[MAX_TONE_ID];
-//int toneId = 0;
-
 
 bool initialTimer=false;
 
-//////////
-
+//DON'T KNOW HOW TO REMOVE THESE
 I2C_HandleTypeDef hi2c1;
 I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi3_tx;
-
-TaskHandle_t xBlueLEDHandler = NULL;
-TaskHandle_t xButtonHandler = NULL;
-TaskHandle_t xScheduleHandler = NULL;
+//////////////////////////////////
 QueueHandle_t userInputEventQueue;
 QueueHandle_t playerEventQueue;
 //added by DUY
@@ -83,36 +61,17 @@ TaskHandle_t xButtonHandler_3 = NULL;
 
 TIM_HandleTypeDef TIM3_InitStruct;
 TIM_OC_InitTypeDef TIM3_OCInitStructure;
-
-
-
-float mySinVal;
-float sample_dt;
-uint16_t sample_N;
-uint16_t i_t;
-uint32_t myDacVal;
 buttonType button = NONE;
 
-
-int16_t dataI2S[100];
-bool soundOn;
-
-void vTaskBlueLED( void *pvParameters );
-void vTaskOrangeLED( void *pvParameters );
 ///////////////////PREDEFINED FUNCTION////////////////////////
-void turnOnRedLED(void);
-void turnOnBlueLED(void);
 void turnOnOrangeLED(void);
 void turnOnGreenLED(void);
-void turnOnAllLEDS(void);
 void turnOffAllLEDS(void);
 void vDetectButtonType(void*);
 static void buttonIrqCallback(void);
 void turnOnCurLEDS(led);
 void blinkLEDS(led);
 void vTaskDetectUserState(void *pvParameters);
-void vTaskPlaySong(void *pvParameters);
-void playTone(float tone, int time_ms);
 void vTaskRunSchedule(void *pvParameters);
 
 /*
@@ -204,17 +163,6 @@ void SystemClock_Config(void)
   HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct);
 }
 
-void InitLED(void)
-{
-    __HAL_RCC_GPIOD_CLK_ENABLE();  // Enable clock to GPIO-D for LEDs
-    // Set GPIOD Pins Parameters 
-    GPIO_InitStruct.Pin     = GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15;  // I/O PD12, PD13, PD14, and PD15
-    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull    = GPIO_PULLDOWN;
-    GPIO_InitStruct.Speed   = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);    // Init GPIOD 
-}
-
 void InitGPIO(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -237,16 +185,10 @@ void InitGPIO(void)
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 }
 
-
-
 void InitTimer3(void)
 {
-		//__TIM1_CLK_ENABLE();
 		__HAL_RCC_TIM3_CLK_ENABLE(); // Enable clock to TIM3 from APB2 bus (48Mhz max)xPLL_P = 84MHz
 		 
-	// TIM4 is configure to 50hz: 50 times in 1s or 1000000us
-		//Tim_Tick_Freq = 1Mhz. Tim_Freq = 50Hz
-
     TIM3_InitStruct.Instance = TIM3;
 		TIM3_InitStruct.Init.Period = 20000-1;
     TIM3_InitStruct.Init.Prescaler   = 84-1;
@@ -304,34 +246,19 @@ int main( void )
 	/* Initialize the serial I/O(console ), This function configures Due's CONSOLE_UART */
 	
 	InitGPIO();
-	//InitLED();
 	InitButton();
 	InitServo();
 	InitTimer3();
 	SetupPWM_TIM3();
-	soundOn = true;
 
 	counting500ms();//inititate the 500ms timer
 	// user input event queue
 	userInputEventQueue = xQueueCreate(2, sizeof(button_action_t));
 	playerEventQueue = xQueueCreate(2, sizeof(player_event_t));
 	
-
-	/* Create one of the two tasks. */
-	
-	//xTaskCreate(	vTaskBlueLED,		/* Pointer to the function that implements the task. */
-	//				"vTaskBlueLED",	/* Text name for the task.  This is to facilitate debugging only. */
-	//				STACK_SIZE_MIN,		/* Stack depth in words. */
-	//				NULL,		/* We are not using the task parameter. */
-	//				tskIDLE_PRIORITY,			/* This task will run at priority 1. */
-	//				&xBlueLEDHandler );		/* We are not using the task handle. */
-
-	//xTaskCreate( vTaskOrangeLED, "vTaskBlueLED", STACK_SIZE_MIN, NULL, tskIDLE_PRIORITY, NULL );
-
-	//xTaskCreate( vTaskButton, "vTaskButton", STACK_SIZE_MIN*2, NULL, tskIDLE_PRIORITY, &xButtonHandler );
 	xTaskCreate(vDetectButtonType, "vDetectButtonType",STACK_SIZE_MIN,NULL,3,&xButtonHandler_1);
 	xTaskCreate(vTaskDetectUserState, "vDetectUserState",STACK_SIZE_MIN,NULL,3,&xButtonHandler_2);
-	xTaskCreate(vTaskRunSchedule, "vTaskPlaySong",STACK_SIZE_MIN,NULL,3,&xButtonHandler_3);
+	xTaskCreate(vTaskRunSchedule, "vTaskPlaySchedule",STACK_SIZE_MIN,NULL,3,&xButtonHandler_3);
 	/* Start the scheduler so our tasks start executing. */
 	vTaskStartScheduler();
 
@@ -343,19 +270,20 @@ int main( void )
 /*-----------------------------------------------------------*/
 static void buttonIrqCallback() {
     button_trigger_flag = 1;
-		//HAL_Delay(10);
 }
+
 static inline bool readGPIOPIn() {
 	if(HAL_GPIO_ReadPin(GPIOA,GPIO_PIN_0)){
 		return 1; //TODO change this to return value of GPIO
 	}
 	return 0;
 }
+
 static inline void buttonFlagReset() {
     // disable irq first
     button_trigger_flag = 0;
-    // enble irq
 }
+
 void TIM5_IRQHandler(void){
 	HAL_TIM_IRQHandler(&TIM_InitStruct_2);
 	if(__HAL_TIM_GET_FLAG(&TIM_InitStruct_2, TIM_FLAG_CC1) != RESET){
@@ -364,10 +292,12 @@ void TIM5_IRQHandler(void){
 	__HAL_TIM_CLEAR_FLAG(&TIM_InitStruct_2, TIM_SR_UIF);
 	return;
 }
+
 void startTimer500ms(){
 	HAL_TIM_Base_Start_IT(&TIM_InitStruct_2);
 	HAL_TIM_Base_Start(&TIM_InitStruct_2);
 }
+
 void stopTimer500ms(){
 	HAL_TIM_Base_Stop_IT(&TIM_InitStruct_2);
 	HAL_TIM_Base_Stop(&TIM_InitStruct_2);
@@ -380,29 +310,20 @@ void vDetectButtonType(void *pvParameters){
             case sys_state_idle:{
                 if (button_trigger_flag == 1) {
                     system_state = sys_state_wait_first_pressed_done;
-                    //timeout_cnt = LONG_PRESSED_TIMEOUT;
                     btn_action = button_single_pressed;
-										//printf("first press is done \n");
                 } else {
                     /* Idle state delay for 10ms */
-                    //delayms(10);
-										//printf("waiting for first press\n");	
 										vTaskDelay(10); // Use vtaskDelay
                 }
                 break;
 							}
             case sys_state_wait_first_pressed_done:
-								//printf("WE ARE IN WAIT FIRST PRESS DONE, WE ARE IN WAIT FIRST PRESS DONE\n");
                 if (HAL_GPIO_ReadPin(GPIOA,GPIO_PIN_0)==0) {
-										//printf("0\n");
 										buttonFlagReset();
 										system_state = sys_state_wait_timeout;										
 								} 
-								//else
-									//printf("1\n");
                 break;
             case sys_state_wait_timeout:
-								//printf("WE ARE IN WAITING TIME OUT, WE ARE IN WAITING TIME OUT,WE ARE IN WAITING TIME OUT\n");
                 if (button_trigger_flag == 0) {
 										if(initialTimer==false){
 											initialTimer=true;
@@ -419,7 +340,6 @@ void vDetectButtonType(void *pvParameters){
 											timeOut=false;
 											btn_action = button_single_pressed;
                       system_state = sys_state_idle;
-											//printf("single press is done,single press is done,single press is done,single press is done\n");
 											//PUSH BUTTON ACTION TO QUEUE
 											printf("pushed single to queue\n");
 											xQueueSend(userInputEventQueue, &btn_action, portMAX_DELAY);
@@ -430,18 +350,14 @@ void vDetectButtonType(void *pvParameters){
                     btn_action = button_double_pressed;
                     system_state = sys_state_idle;
 										//stop timer
-										//HAL_TIM_Base_Stop(&TIM_InitStruct);
-										//HAL_TIM_Base_Stop_IT(&TIM_InitStruct);
 										stopTimer500ms();
 										//reset variables
 										initialTimer=false;
 										//reset timeOut status
 										timeOut=false;
-										//printf("double press is done,double press is done,double press is done\n");
 										//PUSH BUTTON ACTION TO QUEUE
 										printf("pushed double to queue\n");
 										xQueueSend(userInputEventQueue, &btn_action, portMAX_DELAY);
-										//disableInteruptBtn();
 										buttonFlagReset();
                     break;
                 }
@@ -457,9 +373,6 @@ volatile schedule_flag_t schedule_flag = reset;
 void vTaskDetectUserState(void *pvParameters){
 	button_action_t button = button_no_action;
 	schedule_type_t tempSchedule = task_schedule_unknow;
-	//user_action_t userState = user_select_schedule;
-	//select_tone_t tone = {.tone=0,.duration=0};
-	//player_event_t player_event = player_stop;
 	int durationId = -1;
 	led curLedId = none;
 	int tonePosition = -1;
@@ -503,10 +416,8 @@ void vTaskDetectUserState(void *pvParameters){
 						break;
 				}						
 		}
-		//check if the queue size = 8. If so, start the task 3 (Playing music)	
-		//PUSH EVENT PLAYING MUSIC TO QUEUE
 	}
-//TASK 3, playing song
+//TASK 3, playing schedule
 void vTaskRunSchedule(void *pvParameters){
 	bool finished= false;
 	while(1){
@@ -534,88 +445,11 @@ void vTaskRunSchedule(void *pvParameters){
 	}
 }
 
-
-
-
-
-void vTaskBlueLED( void *pvParameters ) // Blue LED
-{
-const char *pcTaskName = "vTaskBlueLED is running\n";
-volatile unsigned long ul;
-
-	/* As per most tasks, this task is implemented in an infinite loop. */
-	for( ;; )
-	{
-		/* Print out the name of this task in debug */
-    printf("%s\n",pcTaskName);
-		HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
-		vTaskDelay(500);
-		
-	}
-} 
-
-void vTaskOrangeLED( void *pvParameters ) // Orange LED
-{
-	const char *pcTaskName = "vTaskOrangeLED is running\n";
-	volatile unsigned long ul;
-
-	/* As per most tasks, this task is implemented in an infinite loop. */
-	for( ;; )
-	{
-		/* Print out the name of this task in debug */
-		printf("%s\n",pcTaskName);
-		HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
-		vTaskDelay(1000);
-	}
-}
-/*-----------------------------------------------------------*/
-
 void vApplicationMallocFailedHook( void )
 {
 	/* This function will only be called if an API call to create a task, queue
 	or semaphore fails because there is too little heap RAM remaining. */
 	for( ;; );
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName )
-{
-	/* This function will only be called if a task overflows its stack.  Note
-	that stack overflow checking does slow down the context switch
-	implementation. */
-	for( ;; );
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationIdleHook( void )
-{
-	/* This example does not use the idle hook to perform any processing. */
-	//HAL_IncTick();
-	//HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationTickHook( void )
-{
-	/* This example does not use the tick hook to perform any processing. */
-}
-
-void turnOnRedLED(void){
-	//Turn on pin 14
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_SET);
-	//12,13,15
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12,GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13,GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_RESET);
-}
-
-void turnOnBlueLED(void){
-	//Turn on pin 15
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_SET);
-	//12,13,14 off
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12,GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13,GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_RESET);
 }
 
 void turnOnOrangeLED(void){
@@ -634,14 +468,6 @@ void turnOnGreenLED(void){
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13,GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_RESET);
-}
-
-void turnOnAllLEDS(void){
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12,GPIO_PIN_SET);
-	//13,14,15 off
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13,GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14,GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_SET);
 }
 
 void turnOffAllLEDS(void){
@@ -664,7 +490,6 @@ void turnOnCurLEDS(led curLed){
 	}
 }
 
-
 void blinkLEDS(led curLed){
 	for(int i=0;i<2;i++){
 		switch(curLed){
@@ -682,23 +507,4 @@ void blinkLEDS(led curLed){
 		vTaskDelay(200);
 	} 
 }
-
-int selectedTonesConfirm = 0;
-void vTaskConfirm(void){
-	for(;;){
-		vTaskSuspend(NULL); //waiting the button press to re-trigger the remaining code
-		//confirm when DOUBLE_PRESS
-		if(button == DOUBLE_PRESS){
-			selectedTonesConfirm++;
-			for(int i=0;i<2;i++){
-				turnOffAllLEDS();
-				HAL_Delay(200);
-				turnOnAllLEDS();
-				HAL_Delay(200);
-			}
-			turnOffAllLEDS();
-		}
-	}
-}
-
 
